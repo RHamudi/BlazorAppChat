@@ -10,3 +10,4 @@ namespace BlazorAppChat.API.Hubs
         }
     }
 }
+ 
