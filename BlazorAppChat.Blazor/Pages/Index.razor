@@ -1,0 +1,99 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.SignalR.Client;
+
+@code {
+    private bool _isChatting = false;
+
+    private string _username;
+
+    private string _message;
+
+    private string _newMessage;
+
+    private List<Message> _messages = new();
+
+    private string _hubUrl;
+    private HubConnection _hubConnection;
+
+    private void BroadcastMessage(string name, string message)
+    {
+        bool IsMine = name.Equals(_username, StringComparison.OrdinalIgnoreCase);
+
+        _messages.Add(new Message(name, message, IsMine));
+
+        StateHasChanged();
+    }
+
+    private async Task SendAsync(string message)
+    {
+        if(_isChatting && string.IsNullOrWhiteSpace(message) is false)
+        {
+            await _hubConnection.SendAsync("Broadcast", _username, message);
+            _newMessage = string.Empty;
+        }
+    }
+
+    private async Task DisconnectAsync()
+    {
+        if(_isChatting)
+        {
+            await SendAsync($"[Notice] {_username} Saiu.");
+            await _hubConnection.StopAsync();
+            await _hubConnection.DisposeAsync();
+            _hubConnection = null;
+            _isChatting = false;
+        }
+    }
+
+    public async Task Chat()
+    {
+        if(string.IsNullOrEmpty(_username))
+        {
+            _message = "Por favor digite o seu nome.";
+            return;
+        }
+
+        try
+        {
+            _isChatting = true;
+
+            _messages.Clear();
+
+            _hubUrl = "http://localhost:5104" + "/chat";
+
+            _hubConnection = new HubConnectionBuilder()
+            .WithUrl(_hubUrl).Build();
+
+            _hubConnection.On<string, string>("Broadcast", BroadcastMessage);
+            await _hubConnection.StartAsync();
+
+            await SendAsync($"[Notice] {_username} Entrou.");
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            _isChatting = false;
+        }
+    }
+
+    private class Message
+    {
+        public Message(string name, string message, bool IsMine)
+        {
+            UserName = name;
+            Body = message;
+            Mine = IsMine;
+        }
+
+        public string UserName { get; set; }
+
+        public string Body { get; set; }
+
+        public bool Mine { get; set; }
+
+        public bool IsNotice => Body.StartsWith("[Notice]");
+
+        public string CSS => Mine ? "sent" : "received";
+
+    }
+}
